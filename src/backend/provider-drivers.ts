@@ -69,6 +69,7 @@ import {
   resolvePiCli,
 } from "./cli";
 import { clineFreeModels } from "./cline-free-models";
+import { cursorPrintClient } from "./cursor-print-client";
 import { checkCursorApiKey, readCursorUsage } from "./cursor-usage";
 import { CustomAcpAgentsClient, type CustomAgentConfig, type CustomAgentSource } from "./custom-acp-agents-client";
 import { isMissingFileError } from "./file-errors";
@@ -1005,6 +1006,7 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
     },
     resolveCli: resolveCursorCli,
     createClient: (cli, timeout, context, confinement) =>
+      cursorPrintClient(cli, timeout, context, confinement) ??
       new AcpAgentClient(cli, timeout, {
         provider: "cursor",
         flavor: CURSOR_ACP_FLAVOR,
