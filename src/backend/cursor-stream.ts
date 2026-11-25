@@ -63,35 +63,6 @@ export function cursorTurnUsage(value: unknown): CursorTurnUsage | null {
   return Object.values(result).some((token) => token !== null) ? result : null;
 }
 
-export type CursorUsagePayload = {
-  readonly inputTokens: number | null;
-  readonly outputTokens: number | null;
-  readonly cachedReadTokens: number | null;
-  readonly cachedWriteTokens: number | null;
-};
-
-/**
- * Cursor's `inputTokens` counts the prompt without its cache, while the agent-usage
- * collection path expects a total input and subtracts the cache from it. Reporting the
- * total keeps cache reads from being counted a second time as uncached input.
- *
- * No total is reported without the uncached part: a total built from the cache alone
- * would tell the collection path that the whole prompt was cached and report zero
- * uncached input, which is a claim the runtime did not make.
- */
-export function cursorUsagePayload(usage: CursorTurnUsage): CursorUsagePayload {
-  const input =
-    usage.inputTokens === null
-      ? null
-      : usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
-  return {
-    inputTokens: input,
-    outputTokens: usage.outputTokens,
-    cachedReadTokens: usage.cacheReadTokens,
-    cachedWriteTokens: usage.cacheWriteTokens,
-  };
-}
-
 function toolName(call: DynamicRecord): { tool: CursorToolKind; call: DynamicRecord } | null {
   for (const [key, kind] of TOOL_KINDS) {
     const value = getRecord(call, key);
