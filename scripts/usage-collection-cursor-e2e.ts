@@ -16,8 +16,18 @@ const REPORT_PATH = ".openbot-build/usage-collection-cursor-e2e.json";
 type Fixture = {
   readonly name: string;
   readonly promptId: string;
-  readonly usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
-  readonly expected: { uncachedInput: number; cachedInput: number; cacheCreation: number; output: number };
+  readonly usage: Partial<{
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  }>;
+  readonly expected: {
+    uncachedInput: number | null;
+    cachedInput: number | null;
+    cacheCreation: number | null;
+    output: number | null;
+  };
 };
 
 const fixtures: readonly Fixture[] = [
@@ -32,6 +42,12 @@ const fixtures: readonly Fixture[] = [
     promptId: "739eb64f-6dd5-4edd-afb4-4b6fb9f14f34",
     usage: { inputTokens: 6, outputTokens: 187, cacheReadTokens: 28968, cacheWriteTokens: 9899 },
     expected: { uncachedInput: 6, cachedInput: 28968, cacheCreation: 9899, output: 187 },
+  },
+  {
+    name: "unreported-values",
+    promptId: "0b5c1e0a-2f7e-4a1e-9d33-5c9f0f3f1c11",
+    usage: { inputTokens: 6, outputTokens: 7 },
+    expected: { uncachedInput: 6, cachedInput: null, cacheCreation: null, output: 7 },
   },
   {
     name: "resumed",
