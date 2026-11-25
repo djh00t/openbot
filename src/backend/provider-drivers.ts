@@ -1006,7 +1006,7 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
     },
     resolveCli: resolveCursorCli,
     createClient: (cli, timeout, context, confinement) =>
-      cursorPrintClient(cli, timeout, context) ??
+      cursorPrintClient(cli, timeout, context, confinement) ??
       new AcpAgentClient(cli, timeout, {
         provider: "cursor",
         flavor: CURSOR_ACP_FLAVOR,

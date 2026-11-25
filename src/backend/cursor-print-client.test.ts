@@ -15,6 +15,17 @@ const TOOL_COMPLETED = `{"type":"tool_call","subtype":"completed","call_id":"cal
 const RESULT = `{"type":"result","subtype":"success","is_error":false,"result":"One\\nTwo\\nThree","session_id":"session-1","request_id":"request-1","usage":{"inputTokens":6,"outputTokens":176,"cacheReadTokens":28974,"cacheWriteTokens":9903}}`;
 const FAILED = `{"type":"result","subtype":"error","is_error":true,"result":"Cursor is not signed in","session_id":"session-1","request_id":"request-2"}`;
 
+function fakeEnvRuntime(): string {
+  const directory = mkdtempSync(join(tmpdir(), "cursor-print-env-"));
+  const path = join(directory, "cursor-agent");
+  writeFileSync(
+    path,
+    `#!/bin/sh\ncat > /dev/null\nprintf '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"%s"}]},"session_id":"session-1"}\\n' "$CURSOR_CONFIG_DIR"\nprintf '{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"session-1","request_id":"request-3"}\\n'\n`,
+  );
+  chmodSync(path, 0o755);
+  return path;
+}
+
 function fakeRuntime(...lines: string[]): string {
   const directory = mkdtempSync(join(tmpdir(), "cursor-print-"));
   const path = join(directory, "cursor-agent");
@@ -107,6 +118,41 @@ describe("cursor print client", () => {
     expect(tool.map((notification) => notification.method)).toEqual(["item/started", "item/completed"]);
     expect(tool[0]?.params).toMatchObject({ item: { name: "echo hi", toolKind: "execute", status: "inProgress" } });
     expect(tool[1]?.params).toMatchObject({ item: { status: "completed", result: "hi\n" } });
+  });
+
+  it("spawns the confined target and gives it the confined environment", async () => {
+    const client = new CursorPrintClient(
+      { executable: "/nonexistent/would-not-run", version: "test" },
+      {
+        cwd: () => tmpdir(),
+        confine: () => ({ command: fakeEnvRuntime(), args: [], windowsVerbatimArguments: false }),
+        confinedEnv: () => ({ CURSOR_CONFIG_DIR: "/confined/config" }),
+      },
+    );
+    const notifications: AppServerNotification[] = [];
+    client.on("notification", (notification) => notifications.push(notification));
+    client.start();
+    const completed = new Promise<void>((resolve) => {
+      client.on("notification", (notification) => {
+        if (notification.method === "turn/completed") resolve();
+      });
+    });
+    await Effect.runPromise(client.request("thread/start", { threadId: "thread-1" }, (value) => value));
+    await Effect.runPromise(
+      client.request("turn/start", { threadId: "thread-1", input: [{ type: "text", text: "go" }] }, (value) => value),
+    );
+    await Promise.race([completed, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    await Effect.runPromise(client.stop());
+    expect(deltas(notifications)).toBe("/confined/config");
+  });
+
+  it("refuses to pretend it compacted a thread", async () => {
+    const client = new CursorPrintClient({ executable: "/nonexistent", version: "test" }, {});
+    client.start();
+    await expect(
+      Effect.runPromise(client.request("thread/compact/start", { threadId: "t" }, (value) => value)),
+    ).rejects.toBeTruthy();
+    await Effect.runPromise(client.stop());
   });
 
   it("says it cannot steer a running turn", async () => {

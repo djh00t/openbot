@@ -7,6 +7,13 @@ import type { AgentClient, DiagnosticOrigin } from "./agent-client";
 import { type CursorCliInfo, cliPathEnvironment, cliSpawnTarget } from "./cli";
 import { cursorToolOutput, cursorToolTitle, parseCursorStreamLine } from "./cursor-stream";
 import {
+  confineSpawnTarget,
+  cursorConfinedEnv,
+  cursorStatePaths,
+  type ProcessConfinement,
+  type SpawnTarget,
+} from "./process-confinement";
+import {
   type AppServerNotification,
   type AppServerRequest,
   getArray,
@@ -23,6 +30,7 @@ import {
   providerSync,
   requiredString,
 } from "./provider-client-effects";
+import { registerProviderProcess } from "./provider-processes";
 
 export const CURSOR_PRINT_ENV = "OPENBOT_CURSOR_PRINT";
 const CURSOR_PRINT_TIMEOUT_MS = 30 * 60_000;
@@ -58,6 +66,8 @@ export type CursorPrintOptions = {
   readonly requestTimeoutMs?: number;
   readonly cwd?: () => string;
   readonly agentEnvironment?: () => Readonly<Record<string, string>>;
+  readonly confine?: (target: SpawnTarget) => SpawnTarget;
+  readonly confinedEnv?: () => Readonly<Record<string, string>>;
 };
 
 export type CursorPrintContext = {
@@ -70,12 +80,19 @@ export function cursorPrintClient(
   cli: CursorCliInfo,
   timeoutMs: number,
   context: CursorPrintContext,
+  confinement?: ProcessConfinement,
 ): AgentClient | null {
   if (!cursorPrintRequested()) return null;
   const account = { ...context.accountEnvironment };
   return new CursorPrintClient(cli, {
     requestTimeoutMs: timeoutMs,
     agentEnvironment: () => ({ ...(context.agentEnvironment?.() ?? {}), ...account }),
+    ...(confinement
+      ? {
+          confine: (target: SpawnTarget) => confineSpawnTarget(target, confinement, cursorStatePaths()),
+          confinedEnv: () => cursorConfinedEnv(),
+        }
+      : {}),
   });
 }
 
@@ -175,8 +192,7 @@ export class CursorPrintClient extends EventEmitter<ClientEvents> implements Age
         break;
       }
       case "thread/compact/start":
-        response = {};
-        break;
+        return yield* providerFailure(new Error("The Cursor print transport cannot compact a thread."));
       case "turn/steer":
         return yield* providerFailure(new Error(sourceText("error.backend.steerUnsupported")));
       default:
@@ -221,12 +237,21 @@ export class CursorPrintClient extends EventEmitter<ClientEvents> implements Age
     ];
     let child: ChildProcessWithoutNullStreams;
     try {
-      const target = cliSpawnTarget(this.cli.executable, argv);
+      const direct = cliSpawnTarget(this.cli.executable, argv);
+      const target = this.options.confine ? this.options.confine(direct) : direct;
       child = spawn(target.command, target.args, {
         cwd: this.options.cwd?.() ?? process.cwd(),
-        env: { ...process.env, ...cliPathEnvironment(this.cli), ...this.options.agentEnvironment?.() },
+        env: {
+          ...process.env,
+          ...cliPathEnvironment(this.cli),
+          ...this.options.confinedEnv?.(),
+          ...this.options.agentEnvironment?.(),
+        },
+        windowsVerbatimArguments: target.windowsVerbatimArguments,
+        windowsHide: true,
         stdio: ["pipe", "pipe", "pipe"],
       });
+      registerProviderProcess(child, this.provider);
     } catch (failure) {
       this.#finish(thread, turn, "failed", failure instanceof Error ? failure.message : String(failure));
       return turn;
