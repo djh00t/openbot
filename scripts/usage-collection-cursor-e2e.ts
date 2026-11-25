@@ -9,11 +9,6 @@ import { AgentUsage } from "../src/backend/database/agent-usage";
 import { DatabaseCore } from "../src/backend/database/database-core";
 import { databaseRows, requiredStringColumn } from "../src/backend/database/database-rows";
 
-// Drives the real collector and the real database: a Cursor turn goes through
-// collectProviderUsage exactly as a provider client's openbot/usage notification does, and the
-// recorded rows are read back. Three turns were captured from cursor-agent 2026.11.22-e9042b2;
-// Cursor reports inputTokens as the prompt without its cache, with the cache counts separate.
-
 const AGENT_ID = "agent-usage-e2e";
 const MODEL = "claude-opus-5-5";
 const REPORT_PATH = ".openbot-build/usage-collection-cursor-e2e.json";
