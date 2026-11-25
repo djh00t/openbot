@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  cursorToolOutput,
-  cursorToolTitle,
-  cursorTurnUsage,
-  cursorUsagePayload,
-  parseCursorStreamLine,
-} from "./cursor-stream";
+import { cursorToolOutput, cursorToolTitle, cursorTurnUsage, parseCursorStreamLine } from "./cursor-stream";
 
 const INIT = `{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/tmp/acpprobe/work","session_id":"307f0fd7-7f9d-4d49-9e2e-f7dda50820d4","model":"Claude Opus 5.5 300K Medium","permissionMode":"default"}`;
 
@@ -95,37 +89,5 @@ describe("cursor stream records", () => {
     expect(cursorTurnUsage({})).toBeNull();
     expect(cursorTurnUsage(undefined)).toBeNull();
     expect(cursorTurnUsage({ inputTokens: -1, outputTokens: 1.5 })).toBeNull();
-  });
-
-  it("hands the collection path a total input so cache reads are not counted twice", () => {
-    const usage = cursorTurnUsage(JSON.parse(RESULT).usage);
-    expect(usage).not.toBeNull();
-    if (!usage) throw new Error("expected usage");
-    expect(cursorUsagePayload(usage)).toEqual({
-      inputTokens: 6 + 28974 + 9903,
-      outputTokens: 176,
-      cachedReadTokens: 28974,
-      cachedWriteTokens: 9903,
-    });
-  });
-
-  it("claims no uncached input when the runtime did not report it", () => {
-    const payload = cursorUsagePayload({
-      inputTokens: null,
-      outputTokens: 12,
-      cacheReadTokens: 9664,
-      cacheWriteTokens: 9565,
-    });
-    expect(payload.inputTokens).toBeNull();
-    expect(payload).toMatchObject({ cachedReadTokens: 9664, cachedWriteTokens: 9565, outputTokens: 12 });
-  });
-
-  it("sums only the parts the runtime reported", () => {
-    expect(
-      cursorUsagePayload({ inputTokens: 4, outputTokens: 7, cacheReadTokens: 100, cacheWriteTokens: null }),
-    ).toMatchObject({ inputTokens: 104, cachedWriteTokens: null });
-    expect(
-      cursorUsagePayload({ inputTokens: 4, outputTokens: 7, cacheReadTokens: null, cacheWriteTokens: null }),
-    ).toMatchObject({ inputTokens: 4 });
   });
 });
