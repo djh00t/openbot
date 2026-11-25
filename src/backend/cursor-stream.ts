@@ -74,10 +74,16 @@ export type CursorUsagePayload = {
  * Cursor's `inputTokens` counts the prompt without its cache, while the agent-usage
  * collection path expects a total input and subtracts the cache from it. Reporting the
  * total keeps cache reads from being counted a second time as uncached input.
+ *
+ * No total is reported without the uncached part: a total built from the cache alone
+ * would tell the collection path that the whole prompt was cached and report zero
+ * uncached input, which is a claim the runtime did not make.
  */
 export function cursorUsagePayload(usage: CursorTurnUsage): CursorUsagePayload {
-  const parts = [usage.inputTokens, usage.cacheReadTokens, usage.cacheWriteTokens];
-  const input = parts.every((part) => part === null) ? null : parts.reduce<number>((sum, part) => sum + (part ?? 0), 0);
+  const input =
+    usage.inputTokens === null
+      ? null
+      : usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
   return {
     inputTokens: input,
     outputTokens: usage.outputTokens,

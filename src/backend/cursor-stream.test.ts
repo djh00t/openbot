@@ -108,4 +108,24 @@ describe("cursor stream records", () => {
       cachedWriteTokens: 9903,
     });
   });
+
+  it("claims no uncached input when the runtime did not report it", () => {
+    const payload = cursorUsagePayload({
+      inputTokens: null,
+      outputTokens: 12,
+      cacheReadTokens: 9664,
+      cacheWriteTokens: 9565,
+    });
+    expect(payload.inputTokens).toBeNull();
+    expect(payload).toMatchObject({ cachedReadTokens: 9664, cachedWriteTokens: 9565, outputTokens: 12 });
+  });
+
+  it("sums only the parts the runtime reported", () => {
+    expect(
+      cursorUsagePayload({ inputTokens: 4, outputTokens: 7, cacheReadTokens: 100, cacheWriteTokens: null }),
+    ).toMatchObject({ inputTokens: 104, cachedWriteTokens: null });
+    expect(
+      cursorUsagePayload({ inputTokens: 4, outputTokens: 7, cacheReadTokens: null, cacheWriteTokens: null }),
+    ).toMatchObject({ inputTokens: 4 });
+  });
 });
