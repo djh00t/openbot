@@ -142,6 +142,19 @@ export function collectProviderUsage(
     });
     return;
   }
+  if (session.provider === "cursor") {
+    usage.record({
+      agentId: agent.id,
+      sessionId: session.id,
+      turnId,
+      provider: session.provider,
+      model,
+      counterId: `${session.id}:cursor:${getString(params, "promptId") ?? turnId}`,
+      baseline: false,
+      tokens: cursorUsageTokens(value),
+    });
+    return;
+  }
   if (session.provider === "acp") {
     usage.record({
       agentId: agent.id,
@@ -203,6 +216,20 @@ export function sideSessionUsageObserver(
     } catch (error) {
       logger.warn("Could not save the usage of a side session.", { kind, provider, error });
     }
+  };
+}
+
+/**
+ * Cursor reports `inputTokens` as the prompt without its cache, with the cache counts separate, so
+ * nothing is subtracted here. A value the runtime did not report stays null rather than becoming a
+ * zero that reads as a measured count.
+ */
+export function cursorUsageTokens(value: DynamicRecord): UsageTokens {
+  return {
+    uncachedInput: count(value.inputTokens),
+    cachedInput: count(value.cacheReadTokens),
+    cacheCreation: count(value.cacheWriteTokens),
+    output: count(value.outputTokens),
   };
 }
 
