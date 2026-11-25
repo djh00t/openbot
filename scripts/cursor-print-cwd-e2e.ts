@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { CursorPrintClient } from "../src/backend/cursor-print-client";
+import {
+  confineSpawnTarget,
+  type ProcessConfinement,
+  type ProviderStatePaths,
+} from "../src/backend/process-confinement";
 import { type AppServerNotification, getRecord, getString } from "../src/backend/protocol";
 
 const REPORT_PATH = ".openbot-build/cursor-print-cwd-e2e.json";
@@ -21,8 +26,18 @@ function fakeRuntime(): string {
   return path;
 }
 
-async function runTurn(threadParams: { cwd?: string }): Promise<{ status: string; printed: string }> {
-  const client = new CursorPrintClient({ executable: fakeRuntime(), version: "e2e" }, {});
+const NO_WRITABLE_STATE: ProviderStatePaths = { writable: [], protected: [] };
+const WORKSPACE_ONLY: ProcessConfinement = { writableRoots: [] };
+
+async function runTurn(
+  threadParams: { cwd?: string },
+  confine?: (target: { command: string; args: string[]; windowsVerbatimArguments: boolean }) => {
+    command: string;
+    args: string[];
+    windowsVerbatimArguments: boolean;
+  },
+): Promise<{ status: string; printed: string }> {
+  const client = new CursorPrintClient({ executable: fakeRuntime(), version: "e2e" }, confine ? { confine } : {});
   const notifications: AppServerNotification[] = [];
   client.on("notification", (notification) => notifications.push(notification));
   client.start();
@@ -64,6 +79,22 @@ try {
   results.push({ case: "no workspace", workspace: null, status: refused.status, printed: refused.printed });
   assert.equal(refused.status, "failed", "a thread with no workspace must not run a turn");
   assert.equal(refused.printed, "", "a refused turn must not run the runtime");
+
+  const refusedByConfinement = await runTurn({ cwd: workspace }, (target) =>
+    confineSpawnTarget(target, WORKSPACE_ONLY, NO_WRITABLE_STATE),
+  );
+  results.push({
+    case: "workspace-only agent on this platform",
+    workspace,
+    status: refusedByConfinement.status,
+    printed: refusedByConfinement.printed,
+  });
+  assert.equal(
+    refusedByConfinement.status,
+    "failed",
+    "a workspace-only agent must refuse where confinement is unavailable",
+  );
+  assert.equal(refusedByConfinement.printed, "", "a refused turn must not run the runtime");
 
   report.result = "pass";
   mkdirSync(".openbot-build", { recursive: true });
