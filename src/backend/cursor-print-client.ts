@@ -55,6 +55,7 @@ type CursorPrintTurn = {
 
 type CursorPrintThread = {
   readonly id: string;
+  cwd: string | null;
   sessionId: string | null;
   model: string | null;
   child: ChildProcessWithoutNullStreams | null;
@@ -160,7 +161,16 @@ export class CursorPrintClient extends EventEmitter<ClientEvents> implements Age
       case "thread/resume": {
         const id = getString(params, "threadId") ?? randomUUID();
         const existing = this.#threads.get(id);
-        const thread = existing ?? { id, sessionId: null, model: null, child: null, killTimer: null, turn: null };
+        const thread = existing ?? {
+          id,
+          cwd: null,
+          sessionId: null,
+          model: null,
+          child: null,
+          killTimer: null,
+          turn: null,
+        };
+        thread.cwd = getString(params, "cwd") ?? thread.cwd;
         thread.model = getString(params, "model") ?? thread.model;
         this.#threads.set(id, thread);
         response = { thread: { id } };
@@ -221,6 +231,11 @@ export class CursorPrintClient extends EventEmitter<ClientEvents> implements Age
       method: "turn/started",
       params: { threadId: thread.id, turn: { id: turn.id, status: "inProgress" } },
     });
+    const workspace = thread.cwd ?? this.options.cwd?.() ?? null;
+    if (workspace === null) {
+      this.#finish(thread, turn, "failed", "No workspace is set for this thread.");
+      return turn;
+    }
     const prompt = promptText(params);
     if (prompt.length === 0) {
       this.#finish(thread, turn, "failed", sourceText("error.provider.acpNoAnswer", { provider: "Cursor" }));
@@ -240,7 +255,7 @@ export class CursorPrintClient extends EventEmitter<ClientEvents> implements Age
       const direct = cliSpawnTarget(this.cli.executable, argv);
       const target = this.options.confine ? this.options.confine(direct) : direct;
       child = spawn(target.command, target.args, {
-        cwd: this.options.cwd?.() ?? process.cwd(),
+        cwd: workspace,
         env: {
           ...process.env,
           ...cliPathEnvironment(this.cli),
